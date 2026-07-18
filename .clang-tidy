@@ -1,0 +1,10 @@
+---
+# Enable all google checks while disabling everything else by default
+Checks: '-*,google-*'
+
+# Treat all enabled style warnings as hard build errors
+WarningsAsErrors: 'google-*'
+
+# Formatting rules applied when clang-tidy automatically fixes issues
+FormatStyle: Google
+...
