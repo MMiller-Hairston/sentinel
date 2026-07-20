@@ -7,33 +7,45 @@ workspace "Sentinel"
 
    toolset "clang"
 
-   local vcpkg_triplet = ""
-
    filter "platforms:Mac"
       system "macosx"
       architecture "ARM64"
-      vcpkg_triplet = "arm64-osx"
+      includedirs { "vcpkg_installed/arm64-osx/include" }
+      libdirs { "vcpkg_installed/arm64-osx/lib" }
+      links {
+         "CoreMedia.framework",
+         "CoreVideo.framework",
+         "Cocoa.framework",
+         "UniformTypeIdentifiers.framework",
+         "IOKit.framework",
+         "ForceFeedback.framework",
+         "Carbon.framework",
+         "CoreAudio.framework",
+         "AudioToolbox.framework",
+         "AVFoundation.framework",
+         "Foundation.framework",
+         "GameController.framework",
+         "Metal.framework",
+         "QuartzCore.framework",
+         "CoreHaptics.framework",
+         "pthread",
+         "m",
+         "objc"
+      }
     
    filter "platforms:Linux"
       system "linux"
       architecture "x86_64"
-      vcpkg_triplet = "x64-linux"
-       
-    
+      includedirs { "vcpkg_installed/x64-linux/include" }
+      libdirs { "vcpkg_installed/x64-linux/lib", "vcpkg_installed/x64-linux/lib/manual-link" }
+     
    filter "platforms:Windows"
       system "windows"
       architecture "x86_64"
-      vcpkg_triplet = "x64-windows"
+      includedirs { "vcpkg_installed/x64-windows/include" }
+      libdirs { "vcpkg_installed/x64-windows/lib", "vcpkg_installed/x64-windows/lib/manual-link" }
 
    filter {}
-
-   includedirs { 
-       "vcpkg_installed/" .. vcpkg_triplet .. "/include" 
-   }
-   libdirs { 
-       "vcpkg_installed/" .. vcpkg_triplet .. "/lib",
-       "vcpkg_installed/" .. vcpkg_triplet .. "/lib/manual-link"
-   }
 
    links { 
        "SDL3" 
