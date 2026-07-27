@@ -16,6 +16,17 @@ constexpr SDL_Color kDestinationColor{122, 182, 255, SDL_ALPHA_OPAQUE};
 constexpr float kArenaWidth = 1280.0f;
 constexpr float kArenaHeight = 720.0f;
 constexpr float kPlayerSpeed = 400.0f;
+
+constexpr SDL_Color kHealthBackColor{52, 65, 78, SDL_ALPHA_OPAQUE};
+constexpr SDL_Color kHealthFillColor{129, 230, 169, SDL_ALPHA_OPAQUE};
+constexpr SDL_Color kDefeatedColor{78, 86, 94, SDL_ALPHA_OPAQUE};
+
+constexpr float kTargetMaxHealth = 100.0f;
+constexpr float kAttackDamage = 25.0f;
+constexpr float kAttackRange = 180.0f;
+
+constexpr float kAttackCooldownDuration = 0.75f;
+
 }  // namespace
 
 void ArenaGame::Frame(float deltaTime, Core::Renderer& renderer) {
@@ -32,6 +43,8 @@ void ArenaGame::Update(float deltaTime) {
   } else {
     UpdateClickToMove(deltaTime);
   }
+
+  UpdateAttack(keys, deltaTime);
 }
 
 void ArenaGame::UpdateControlMode(const bool* keys) {
@@ -123,9 +136,73 @@ void ArenaGame::Render(Core::Renderer& renderer) {
         markerSize,
     };
     renderer.DrawFilledRect(marker, kDestinationColor);
+
+    constexpr float cooldownHeight = 8.0f;
+    constexpr float cooldownGap = 8.0f;
+    const SDL_FRect cooldownBack{
+        m_Player.x,
+        m_Player.y + m_Player.h + cooldownGap,
+        m_Player.w,
+        cooldownHeight,
+    };
+    const float readyRatio =
+        1.0f - m_AttackCooldownRemaining / kAttackCooldownDuration;
+    SDL_FRect cooldownFill = cooldownBack;
+    cooldownFill.w *= readyRatio;
+
+    renderer.DrawFilledRect(cooldownBack, kHealthBackColor);
+    renderer.DrawFilledRect(cooldownFill, kDestinationColor);
   }
 
+  const SDL_Color targetColor =
+      m_TargetHealth > 0.0f ? kTargetColor : kDefeatedColor;
+  renderer.DrawFilledRect(m_Target, targetColor);
+
+  constexpr float barHeight = 10.0f;
+  constexpr float barGap = 8.0f;
+  const SDL_FRect healthBack{
+      m_Target.x,
+      m_Target.y - barGap - barHeight,
+      m_Target.w,
+      barHeight,
+  };
+  const float healthRatio = m_TargetHealth / kTargetMaxHealth;
+  SDL_FRect healthFill = healthBack;
+  healthFill.w *= healthRatio;
+
   renderer.DrawFilledRect(m_Player, kPlayerColor);
-  renderer.DrawFilledRect(m_Target, kTargetColor);
+  renderer.DrawFilledRect(healthBack, kHealthBackColor);
+  renderer.DrawFilledRect(healthFill, kHealthFillColor);
+}
+
+void ArenaGame::UpdateAttack(const bool* keys, float deltaTime) {
+  m_AttackCooldownRemaining =
+      std::max(0.0f, m_AttackCooldownRemaining - deltaTime);
+
+  const bool attackHeld = keys[SDL_SCANCODE_SPACE];
+  const bool attackPressed = attackHeld && !m_WasAttackHeld;
+  m_WasAttackHeld = attackHeld;
+
+  if (!attackPressed || m_TargetHealth <= 0.0f ||
+      m_AttackCooldownRemaining > 0.0f) {
+    return;
+  }
+
+  const SDL_FPoint playerCenter{
+      m_Player.x + m_Player.w * 0.5f,
+      m_Player.y + m_Player.h * 0.5f,
+  };
+  const SDL_FPoint targetCenter{
+      m_Target.x + m_Target.w * 0.5f,
+      m_Target.y + m_Target.h * 0.5f,
+  };
+  const float distance = std::hypot(targetCenter.x - playerCenter.x,
+                                    targetCenter.y - playerCenter.y);
+
+  if (distance <= kAttackRange) {
+    m_TargetHealth =
+        std::clamp(m_TargetHealth - kAttackDamage, 0.0f, kTargetMaxHealth);
+    m_AttackCooldownRemaining = kAttackCooldownDuration;
+  }
 }
 }  // namespace Game

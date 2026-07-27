@@ -18,6 +18,7 @@ class ArenaGame {
   void Frame(float deltaTime, Core::Renderer& renderer);
 
  private:
+  // Movement
   void Update(float deltaTime);
   void UpdateControlMode(const bool* keys);
   void UpdateWasd(const bool* keys, float deltaTime);
@@ -30,5 +31,12 @@ class ArenaGame {
   SDL_FRect m_Target{920.0f, 320.0f, 80.0f, 80.0f};
   SDL_FPoint m_MoveDestination{};
   bool m_HasMoveDestination = false;
+
+  // Fighting
+  void UpdateAttack(const bool* keys, float deltaTime);
+
+  float m_TargetHealth = 100.0f;
+  bool m_WasAttackHeld = false;
+  float m_AttackCooldownRemaining = 0.0f;
 };
 }  // namespace Game
