@@ -1,9 +1,11 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "Renderer.h"
 #include "Window.h"
 
 namespace Core {
@@ -19,7 +21,9 @@ class Application {
                            ApplicationSpecification());
   ~Application();
 
-  void Run();
+  using FrameCallback = std::function<void(float, Renderer&)>;
+
+  void Run(const FrameCallback& onFrame);
   void Stop();
 
   static Application& Get();
@@ -27,7 +31,10 @@ class Application {
 
  private:
   ApplicationSpecification m_Specification;
+
   std::shared_ptr<Window> m_Window;
+  std::shared_ptr<Renderer> m_Renderer;
+
   bool m_Running = false;
 };
 

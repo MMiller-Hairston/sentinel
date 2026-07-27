@@ -24,15 +24,18 @@ Application::Application(const ApplicationSpecification& specification)
 
   m_Window = std::make_shared<Window>(m_Specification.WindowSpec);
   m_Window->Create();
+
+  m_Renderer = std::make_shared<Renderer>(m_Window->GetHandle());
 }
 
 Application::~Application() {
+  m_Renderer.reset();
   m_Window->Destroy();
   SDL_Quit();
   s_Application = nullptr;
 }
 
-void Application::Run() {
+void Application::Run(const FrameCallback& onFrame) {
   m_Running = true;
   float lastTime = GetTime();
 
@@ -52,6 +55,11 @@ void Application::Run() {
     float currentTime = GetTime();
     float timestep = SDL_clamp(currentTime - lastTime, 0.001f, 0.1f);
     lastTime = currentTime;
+
+    // This is our draw frame
+    m_Renderer->BeginFrame();
+    onFrame(timestep, *m_Renderer);
+    m_Renderer->EndFrame();
 
     m_Window->Update();
   }
