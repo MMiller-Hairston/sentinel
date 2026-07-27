@@ -27,8 +27,8 @@ void Renderer::BeginFrame() {
   }
 }
 
-void Renderer::DrawFilledRect(const SDL_FRect& rect) {
-  if (!SDL_SetRenderDrawColor(m_Handle, 109, 228, 195, SDL_ALPHA_OPAQUE) ||
+void Renderer::DrawFilledRect(const SDL_FRect& rect, SDL_Color color) {
+  if (!SDL_SetRenderDrawColor(m_Handle, color.r, color.g, color.b, color.a) ||
       !SDL_RenderFillRect(m_Handle, &rect)) {
     throw std::runtime_error(std::string{"SDL rectangle draw failed: "} +
                              SDL_GetError());

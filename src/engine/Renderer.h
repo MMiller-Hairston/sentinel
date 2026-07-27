@@ -9,7 +9,7 @@ class Renderer {
   ~Renderer();
 
   void BeginFrame();
-  void DrawFilledRect(const SDL_FRect& rect);
+  void DrawFilledRect(const SDL_FRect& rect, SDL_Color color);
   void EndFrame();
 
  private:
