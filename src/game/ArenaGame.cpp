@@ -136,23 +136,23 @@ void ArenaGame::Render(Core::Renderer& renderer) {
         markerSize,
     };
     renderer.DrawFilledRect(marker, kDestinationColor);
-
-    constexpr float cooldownHeight = 8.0f;
-    constexpr float cooldownGap = 8.0f;
-    const SDL_FRect cooldownBack{
-        m_Player.x,
-        m_Player.y + m_Player.h + cooldownGap,
-        m_Player.w,
-        cooldownHeight,
-    };
-    const float readyRatio =
-        1.0f - m_AttackCooldownRemaining / kAttackCooldownDuration;
-    SDL_FRect cooldownFill = cooldownBack;
-    cooldownFill.w *= readyRatio;
-
-    renderer.DrawFilledRect(cooldownBack, kHealthBackColor);
-    renderer.DrawFilledRect(cooldownFill, kDestinationColor);
   }
+
+  constexpr float cooldownHeight = 8.0f;
+  constexpr float cooldownGap = 8.0f;
+  const SDL_FRect cooldownBack{
+      m_Player.x,
+      m_Player.y + m_Player.h + cooldownGap,
+      m_Player.w,
+      cooldownHeight,
+  };
+  const float readyRatio =
+      1.0f - m_AttackCooldownRemaining / kAttackCooldownDuration;
+  SDL_FRect cooldownFill = cooldownBack;
+  cooldownFill.w *= readyRatio;
+
+  renderer.DrawFilledRect(cooldownBack, kHealthBackColor);
+  renderer.DrawFilledRect(cooldownFill, kDestinationColor);
 
   const SDL_Color targetColor =
       m_TargetHealth > 0.0f ? kTargetColor : kDefeatedColor;
