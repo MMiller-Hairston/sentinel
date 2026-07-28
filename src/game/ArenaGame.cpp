@@ -21,11 +21,37 @@ constexpr SDL_Color kHealthBackColor{52, 65, 78, SDL_ALPHA_OPAQUE};
 constexpr SDL_Color kHealthFillColor{129, 230, 169, SDL_ALPHA_OPAQUE};
 constexpr SDL_Color kDefeatedColor{78, 86, 94, SDL_ALPHA_OPAQUE};
 
+// Attack
 constexpr float kTargetMaxHealth = 100.0f;
 constexpr float kAttackDamage = 25.0f;
 constexpr float kAttackRange = 180.0f;
 
 constexpr float kAttackCooldownDuration = 0.75f;
+
+// Abilities
+constexpr SDL_Color kSkillShotColor{255, 201, 120, SDL_ALPHA_OPAQUE};
+constexpr float kSkillShotSize = 24.0f;
+constexpr float kSkillShotSpeed = 650.0f;
+constexpr float kSkillShotDamage = 40.0f;
+constexpr float kSkillShotCooldownDuration = 1.5f;
+
+void DrawCooldownBar(Core::Renderer& renderer, const SDL_FRect& back,
+                     float remaining, float duration, SDL_Color fillColor) {
+  const float readyRatio = 1.0f - remaining / duration;
+  SDL_FRect fill = back;
+  fill.w *= readyRatio;
+
+  renderer.DrawFilledRect(back, kHealthBackColor);
+  renderer.DrawFilledRect(fill, fillColor);
+}
+
+// Dash
+constexpr SDL_Color kDashColor{205, 160, 255, SDL_ALPHA_OPAQUE};
+constexpr float kDashDistance = 220.0f;
+constexpr float kDashCooldownDuration = 3.0f;
+
+constexpr float kTargetSpeed = 140.0f;
+constexpr float kTargetStopDistance = 110.0f;
 
 }  // namespace
 
@@ -45,6 +71,9 @@ void ArenaGame::Update(float deltaTime) {
   }
 
   UpdateAttack(keys, deltaTime);
+  UpdateSkillShot(keys, deltaTime);
+  UpdateDash(keys, deltaTime);
+  UpdateTarget(deltaTime);
 }
 
 void ArenaGame::UpdateControlMode(const bool* keys) {
@@ -69,7 +98,7 @@ void ArenaGame::UpdateWasd(const bool* keys, float deltaTime) {
     direction.y /= length;
   }
 
-  MovePlayer(direction, kPlayerSpeed * deltaTime);
+  MoveActor(m_Player, direction, kPlayerSpeed * deltaTime);
 }
 
 void ArenaGame::UpdateClickToMove(float deltaTime) {
@@ -112,18 +141,19 @@ void ArenaGame::UpdateClickToMove(float deltaTime) {
   const float requestedDistance = kPlayerSpeed * deltaTime;
   const float travelDistance = std::min(requestedDistance, remainingDistance);
 
-  MovePlayer(direction, travelDistance);
+  MoveActor(m_Player, direction, travelDistance);
 
   if (travelDistance == remainingDistance) {
     m_HasMoveDestination = false;
   }
 }
 
-void ArenaGame::MovePlayer(SDL_FPoint direction, float distance) {
-  m_Player.x += direction.x * distance;
-  m_Player.y += direction.y * distance;
-  m_Player.x = std::clamp(m_Player.x, 0.0f, kArenaWidth - m_Player.w);
-  m_Player.y = std::clamp(m_Player.y, 0.0f, kArenaHeight - m_Player.h);
+void ArenaGame::MoveActor(SDL_FRect& actor, SDL_FPoint direction,
+                          float distance) {
+  actor.x += direction.x * distance;
+  actor.y += direction.y * distance;
+  actor.x = std::clamp(actor.x, 0.0f, kArenaWidth - actor.w);
+  actor.y = std::clamp(actor.y, 0.0f, kArenaHeight - actor.h);
 }
 
 void ArenaGame::Render(Core::Renderer& renderer) {
@@ -139,20 +169,27 @@ void ArenaGame::Render(Core::Renderer& renderer) {
   }
 
   constexpr float cooldownHeight = 8.0f;
-  constexpr float cooldownGap = 8.0f;
-  const SDL_FRect cooldownBack{
+  constexpr float cooldownTopGap = 8.0f;
+  constexpr float cooldownBetweenGap = 8.0f;
+
+  const SDL_FRect attackCooldownBack{
       m_Player.x,
-      m_Player.y + m_Player.h + cooldownGap,
+      m_Player.y + m_Player.h + cooldownTopGap,
       m_Player.w,
       cooldownHeight,
   };
-  const float readyRatio =
-      1.0f - m_AttackCooldownRemaining / kAttackCooldownDuration;
-  SDL_FRect cooldownFill = cooldownBack;
-  cooldownFill.w *= readyRatio;
+  SDL_FRect skillShotCooldownBack = attackCooldownBack;
+  skillShotCooldownBack.y += cooldownHeight + cooldownBetweenGap;
 
-  renderer.DrawFilledRect(cooldownBack, kHealthBackColor);
-  renderer.DrawFilledRect(cooldownFill, kDestinationColor);
+  SDL_FRect dashCooldownBack = skillShotCooldownBack;
+  dashCooldownBack.y += cooldownHeight + cooldownBetweenGap;
+
+  DrawCooldownBar(renderer, attackCooldownBack, m_AttackCooldownRemaining,
+                  kAttackCooldownDuration, kDestinationColor);
+  DrawCooldownBar(renderer, skillShotCooldownBack, m_SkillShotCooldownRemaining,
+                  kSkillShotCooldownDuration, kSkillShotColor);
+  DrawCooldownBar(renderer, dashCooldownBack, m_DashCooldownRemaining,
+                  kDashCooldownDuration, kDashColor);
 
   const SDL_Color targetColor =
       m_TargetHealth > 0.0f ? kTargetColor : kDefeatedColor;
@@ -173,6 +210,10 @@ void ArenaGame::Render(Core::Renderer& renderer) {
   renderer.DrawFilledRect(m_Player, kPlayerColor);
   renderer.DrawFilledRect(healthBack, kHealthBackColor);
   renderer.DrawFilledRect(healthFill, kHealthFillColor);
+
+  if (m_SkillShot.active) {
+    renderer.DrawFilledRect(m_SkillShot.bounds, kSkillShotColor);
+  }
 }
 
 void ArenaGame::UpdateAttack(const bool* keys, float deltaTime) {
@@ -204,5 +245,154 @@ void ArenaGame::UpdateAttack(const bool* keys, float deltaTime) {
         std::clamp(m_TargetHealth - kAttackDamage, 0.0f, kTargetMaxHealth);
     m_AttackCooldownRemaining = kAttackCooldownDuration;
   }
+}
+
+void ArenaGame::UpdateSkillShot(const bool* keys, float deltaTime) {
+  m_SkillShotCooldownRemaining =
+      std::max(0.0f, m_SkillShotCooldownRemaining - deltaTime);
+
+  const bool skillHeld = keys[SDL_SCANCODE_Q];
+  const bool skillPressed = skillHeld && !m_WasSkillShotHeld;
+  m_WasSkillShotHeld = skillHeld;
+
+  if (skillPressed && m_SkillShotCooldownRemaining == 0.0f &&
+      !m_SkillShot.active && m_TargetHealth > 0.0f) {
+    float mouseX = 0.0f;
+    float mouseY = 0.0f;
+    SDL_GetMouseState(&mouseX, &mouseY);
+
+    const SDL_FPoint playerCenter{
+        m_Player.x + m_Player.w * 0.5f,
+        m_Player.y + m_Player.h * 0.5f,
+    };
+    SDL_FPoint direction{
+        mouseX - playerCenter.x,
+        mouseY - playerCenter.y,
+    };
+    const float length = std::hypot(direction.x, direction.y);
+
+    if (length > 0.0f) {
+      direction.x /= length;
+      direction.y /= length;
+      m_SkillShot.bounds = {
+          playerCenter.x - kSkillShotSize * 0.5f,
+          playerCenter.y - kSkillShotSize * 0.5f,
+          kSkillShotSize,
+          kSkillShotSize,
+      };
+      m_SkillShot.velocity = {
+          direction.x * kSkillShotSpeed,
+          direction.y * kSkillShotSpeed,
+      };
+      m_SkillShot.active = true;
+      m_SkillShotCooldownRemaining = kSkillShotCooldownDuration;
+    }
+  }
+
+  if (!m_SkillShot.active) {
+    return;
+  }
+
+  m_SkillShot.bounds.x += m_SkillShot.velocity.x * deltaTime;
+  m_SkillShot.bounds.y += m_SkillShot.velocity.y * deltaTime;
+
+  if (SDL_HasRectIntersectionFloat(&m_SkillShot.bounds, &m_Target)) {
+    m_TargetHealth =
+        std::clamp(m_TargetHealth - kSkillShotDamage, 0.0f, kTargetMaxHealth);
+    m_SkillShot.active = false;
+    return;
+  }
+
+  const bool outsideArena =
+      m_SkillShot.bounds.x + m_SkillShot.bounds.w < 0.0f ||
+      m_SkillShot.bounds.x > kArenaWidth ||
+      m_SkillShot.bounds.y + m_SkillShot.bounds.h < 0.0f ||
+      m_SkillShot.bounds.y > kArenaHeight;
+
+  if (outsideArena) {
+    m_SkillShot.active = false;
+  }
+}
+
+void ArenaGame::UpdateDash(const bool* keys, float deltaTime) {
+  m_DashCooldownRemaining = std::max(0.0f, m_DashCooldownRemaining - deltaTime);
+
+  const bool dashHeld = keys[SDL_SCANCODE_E];
+  const bool dashPressed = dashHeld && !m_WasDashHeld;
+  m_WasDashHeld = dashHeld;
+
+  if (!dashPressed || m_DashCooldownRemaining > 0.0f) {
+    return;
+  }
+
+  float mouseX = 0.0f;
+  float mouseY = 0.0f;
+  SDL_GetMouseState(&mouseX, &mouseY);
+
+  const SDL_FPoint playerCenter{
+      m_Player.x + m_Player.w * 0.5f,
+      m_Player.y + m_Player.h * 0.5f,
+  };
+  SDL_FPoint direction{
+      mouseX - playerCenter.x,
+      mouseY - playerCenter.y,
+  };
+  const float cursorDistance = std::hypot(direction.x, direction.y);
+
+  if (cursorDistance == 0.0f) {
+    return;
+  }
+
+  direction.x /= cursorDistance;
+  direction.y /= cursorDistance;
+
+  const float travelDistance = std::min(kDashDistance, cursorDistance);
+  const SDL_FPoint previousPosition{
+      m_Player.x,
+      m_Player.y,
+  };
+
+  MoveActor(m_Player, direction, travelDistance);
+
+  const bool moved =
+      m_Player.x != previousPosition.x || m_Player.y != previousPosition.y;
+  if (!moved) {
+    return;
+  }
+
+  m_HasMoveDestination = false;
+  m_DashCooldownRemaining = kDashCooldownDuration;
+}
+
+void ArenaGame::UpdateTarget(float deltaTime) {
+  if (m_TargetHealth <= 0.0f) {
+    return;
+  }
+
+  const SDL_FPoint playerCenter{
+      m_Player.x + m_Player.w * 0.5f,
+      m_Player.y + m_Player.h * 0.5f,
+  };
+  const SDL_FPoint targetCenter{
+      m_Target.x + m_Target.w * 0.5f,
+      m_Target.y + m_Target.h * 0.5f,
+  };
+  SDL_FPoint direction{
+      playerCenter.x - targetCenter.x,
+      playerCenter.y - targetCenter.y,
+  };
+  const float distance = std::hypot(direction.x, direction.y);
+  const float remainingTravel = std::max(0.0f, distance - kTargetStopDistance);
+
+  if (remainingTravel == 0.0f) {
+    return;
+  }
+
+  direction.x /= distance;
+  direction.y /= distance;
+  const float requestedTravel = kTargetSpeed * deltaTime;
+  const float travelDistance = std::min(requestedTravel, remainingTravel);
+
+  MoveActor(m_Target, direction, travelDistance);
 }
 }  // namespace Game

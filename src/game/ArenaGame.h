@@ -23,7 +23,7 @@ class ArenaGame {
   void UpdateControlMode(const bool* keys);
   void UpdateWasd(const bool* keys, float deltaTime);
   void UpdateClickToMove(float deltaTime);
-  void MovePlayer(SDL_FPoint direction, float distance);
+  void MoveActor(SDL_FRect& actor, SDL_FPoint direction, float distance);
   void Render(Core::Renderer& renderer);
 
   ControlMode m_ControlMode = ControlMode::Wasd;
@@ -38,5 +38,25 @@ class ArenaGame {
   float m_TargetHealth = 100.0f;
   bool m_WasAttackHeld = false;
   float m_AttackCooldownRemaining = 0.0f;
+
+  struct Projectile {
+    SDL_FRect bounds{};
+    SDL_FPoint velocity{};
+    bool active = false;
+  };
+
+  void UpdateSkillShot(const bool* keys, float deltaTime);
+
+  Projectile m_SkillShot;
+  bool m_WasSkillShotHeld = false;
+  float m_SkillShotCooldownRemaining = 0.0f;
+
+  // Dash
+  void UpdateDash(const bool* keys, float deltaTime);
+  bool m_WasDashHeld = false;
+  float m_DashCooldownRemaining = 0.0f;
+
+  // Enemy
+  void UpdateTarget(float deltaTime);
 };
 }  // namespace Game
