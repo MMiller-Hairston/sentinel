@@ -21,6 +21,23 @@ constexpr SDL_Color kHealthBackColor{52, 65, 78, SDL_ALPHA_OPAQUE};
 constexpr SDL_Color kHealthFillColor{129, 230, 169, SDL_ALPHA_OPAQUE};
 constexpr SDL_Color kDefeatedColor{78, 86, 94, SDL_ALPHA_OPAQUE};
 
+void DrawHealthBar(Core::Renderer& renderer, const SDL_FRect& actor,
+                   float health, float maxHealth) {
+  constexpr float barHeight = 10.0f;
+  constexpr float barGap = 8.0f;
+  const SDL_FRect back{
+      actor.x,
+      actor.y - barGap - barHeight,
+      actor.w,
+      barHeight,
+  };
+  SDL_FRect fill = back;
+  fill.w *= health / maxHealth;
+
+  renderer.DrawFilledRect(back, kHealthBackColor);
+  renderer.DrawFilledRect(fill, kHealthFillColor);
+}
+
 // Attack
 constexpr float kTargetMaxHealth = 100.0f;
 constexpr float kAttackDamage = 25.0f;
@@ -53,6 +70,13 @@ constexpr float kDashCooldownDuration = 3.0f;
 constexpr float kTargetSpeed = 140.0f;
 constexpr float kTargetStopDistance = 110.0f;
 
+constexpr float kPlayerMaxHealth = 100.0f;
+constexpr float kTargetAttackDamage = 15.0f;
+constexpr float kTargetAttackRange = 112.0f;
+constexpr float kTargetAttackCooldownDuration = 1.0f;
+
+constexpr float kRestartDelay = 2.0f;
+
 }  // namespace
 
 void ArenaGame::Frame(float deltaTime, Core::Renderer& renderer) {
@@ -61,6 +85,11 @@ void ArenaGame::Frame(float deltaTime, Core::Renderer& renderer) {
 }
 
 void ArenaGame::Update(float deltaTime) {
+  if (IsEncounterOver()) {
+    UpdateRestart(deltaTime);
+    return;
+  }
+
   const bool* keys = SDL_GetKeyboardState(nullptr);
   UpdateControlMode(keys);
 
@@ -74,6 +103,11 @@ void ArenaGame::Update(float deltaTime) {
   UpdateSkillShot(keys, deltaTime);
   UpdateDash(keys, deltaTime);
   UpdateTarget(deltaTime);
+  UpdateTargetAttack(deltaTime);
+
+  if (IsEncounterOver()) {
+    m_RestartDelayRemaining = kRestartDelay;
+  }
 }
 
 void ArenaGame::UpdateControlMode(const bool* keys) {
@@ -193,26 +227,24 @@ void ArenaGame::Render(Core::Renderer& renderer) {
 
   const SDL_Color targetColor =
       m_TargetHealth > 0.0f ? kTargetColor : kDefeatedColor;
+  const SDL_Color playerColor =
+      m_PlayerHealth > 0.0f ? kPlayerColor : kDefeatedColor;
   renderer.DrawFilledRect(m_Target, targetColor);
-
-  constexpr float barHeight = 10.0f;
-  constexpr float barGap = 8.0f;
-  const SDL_FRect healthBack{
-      m_Target.x,
-      m_Target.y - barGap - barHeight,
-      m_Target.w,
-      barHeight,
-  };
-  const float healthRatio = m_TargetHealth / kTargetMaxHealth;
-  SDL_FRect healthFill = healthBack;
-  healthFill.w *= healthRatio;
-
-  renderer.DrawFilledRect(m_Player, kPlayerColor);
-  renderer.DrawFilledRect(healthBack, kHealthBackColor);
-  renderer.DrawFilledRect(healthFill, kHealthFillColor);
+  renderer.DrawFilledRect(m_Player, playerColor);
+  DrawHealthBar(renderer, m_Target, m_TargetHealth, kTargetMaxHealth);
+  DrawHealthBar(renderer, m_Player, m_PlayerHealth, kPlayerMaxHealth);
 
   if (m_SkillShot.active) {
     renderer.DrawFilledRect(m_SkillShot.bounds, kSkillShotColor);
+  }
+
+  if (IsEncounterOver()) {
+    constexpr SDL_FRect restartBack{440.0f, 680.0f, 400.0f, 10.0f};
+    const SDL_Color outcomeColor =
+        m_TargetHealth <= 0.0f ? kHealthFillColor : kTargetColor;
+
+    DrawCooldownBar(renderer, restartBack, m_RestartDelayRemaining,
+                    kRestartDelay, outcomeColor);
   }
 }
 
@@ -395,4 +427,73 @@ void ArenaGame::UpdateTarget(float deltaTime) {
 
   MoveActor(m_Target, direction, travelDistance);
 }
+
+void ArenaGame::UpdateTargetAttack(float deltaTime) {
+  m_TargetAttackCooldownRemaining =
+      std::max(0.0f, m_TargetAttackCooldownRemaining - deltaTime);
+
+  if (m_TargetHealth <= 0.0f || m_PlayerHealth <= 0.0f ||
+      m_TargetAttackCooldownRemaining > 0.0f) {
+    return;
+  }
+
+  const SDL_FPoint playerCenter{
+      m_Player.x + m_Player.w * 0.5f,
+      m_Player.y + m_Player.h * 0.5f,
+  };
+  const SDL_FPoint targetCenter{
+      m_Target.x + m_Target.w * 0.5f,
+      m_Target.y + m_Target.h * 0.5f,
+  };
+  const float distance = std::hypot(playerCenter.x - targetCenter.x,
+                                    playerCenter.y - targetCenter.y);
+
+  if (distance > kTargetAttackRange) {
+    return;
+  }
+
+  m_PlayerHealth =
+      std::clamp(m_PlayerHealth - kTargetAttackDamage, 0.0f, kPlayerMaxHealth);
+  m_TargetAttackCooldownRemaining = kTargetAttackCooldownDuration;
+
+  if (m_PlayerHealth == 0.0f) {
+    m_HasMoveDestination = false;
+    m_SkillShot.active = false;
+  }
+}
+
+bool ArenaGame::IsEncounterOver() const {
+  return m_PlayerHealth <= 0.0f || m_TargetHealth <= 0.0f;
+}
+
+void ArenaGame::UpdateRestart(float deltaTime) {
+  m_RestartDelayRemaining = std::max(0.0f, m_RestartDelayRemaining - deltaTime);
+
+  if (m_RestartDelayRemaining == 0.0f) {
+    ResetEncounter();
+  }
+}
+
+void ArenaGame::ResetEncounter() {
+  m_Player = kPlayerStart;
+  m_Target = kTargetStart;
+  m_MoveDestination = {};
+  m_HasMoveDestination = false;
+
+  m_PlayerHealth = kPlayerMaxHealth;
+  m_TargetHealth = kTargetMaxHealth;
+
+  m_AttackCooldownRemaining = 0.0f;
+  m_SkillShot = {};
+  m_SkillShotCooldownRemaining = 0.0f;
+  m_DashCooldownRemaining = 0.0f;
+  m_TargetAttackCooldownRemaining = 0.0f;
+  m_RestartDelayRemaining = 0.0f;
+
+  const bool* keys = SDL_GetKeyboardState(nullptr);
+  m_WasAttackHeld = keys[SDL_SCANCODE_SPACE];
+  m_WasSkillShotHeld = keys[SDL_SCANCODE_Q];
+  m_WasDashHeld = keys[SDL_SCANCODE_E];
+}
+
 }  // namespace Game

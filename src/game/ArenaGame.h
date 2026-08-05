@@ -27,8 +27,6 @@ class ArenaGame {
   void Render(Core::Renderer& renderer);
 
   ControlMode m_ControlMode = ControlMode::Wasd;
-  SDL_FRect m_Player{600.0f, 320.0f, 80.0f, 80.0f};
-  SDL_FRect m_Target{920.0f, 320.0f, 80.0f, 80.0f};
   SDL_FPoint m_MoveDestination{};
   bool m_HasMoveDestination = false;
 
@@ -58,5 +56,24 @@ class ArenaGame {
 
   // Enemy
   void UpdateTarget(float deltaTime);
+  void UpdateTargetAttack(float deltaTime);
+
+  float m_PlayerHealth = 100.0f;
+  float m_TargetAttackCooldownRemaining = 0.0f;
+
+  static constexpr SDL_FRect kPlayerStart{600.0f, 320.0f, 80.0f, 80.0f};
+  static constexpr SDL_FRect kTargetStart{920.0f, 320.0f, 80.0f, 80.0f};
+
+  SDL_FRect m_Player = kPlayerStart;
+  SDL_FRect m_Target = kTargetStart;
+
+  // Encounter
+  bool IsEncounterOver() const;
+  void UpdateRestart(float deltaTime);
+  void ResetEncounter();
+
+  float m_RestartDelayRemaining = 0.0f;
+
+  float m_TargetAttackWindupRemaining = 0.0f;
 };
 }  // namespace Game
