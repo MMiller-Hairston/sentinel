@@ -77,6 +77,9 @@ constexpr float kTargetAttackCooldownDuration = 1.0f;
 
 constexpr float kRestartDelay = 2.0f;
 
+constexpr float kTargetAttackWindupDuration = 0.45f;
+constexpr SDL_Color kTargetWindupColor{255, 201, 120, SDL_ALPHA_OPAQUE};
+
 }  // namespace
 
 void ArenaGame::Frame(float deltaTime, Core::Renderer& renderer) {
@@ -225,8 +228,12 @@ void ArenaGame::Render(Core::Renderer& renderer) {
   DrawCooldownBar(renderer, dashCooldownBack, m_DashCooldownRemaining,
                   kDashCooldownDuration, kDashColor);
 
-  const SDL_Color targetColor =
-      m_TargetHealth > 0.0f ? kTargetColor : kDefeatedColor;
+  SDL_Color targetColor = kTargetColor;
+  if (m_TargetHealth <= 0.0f) {
+    targetColor = kDefeatedColor;
+  } else if (m_TargetAttackWindupRemaining > 0.0f) {
+    targetColor = kTargetWindupColor;
+  }
   const SDL_Color playerColor =
       m_PlayerHealth > 0.0f ? kPlayerColor : kDefeatedColor;
   renderer.DrawFilledRect(m_Target, targetColor);
@@ -236,6 +243,20 @@ void ArenaGame::Render(Core::Renderer& renderer) {
 
   if (m_SkillShot.active) {
     renderer.DrawFilledRect(m_SkillShot.bounds, kSkillShotColor);
+  }
+
+  if (m_TargetAttackWindupRemaining > 0.0f) {
+    constexpr float windupGap = 8.0f;
+    constexpr float windupHeight = 8.0f;
+    const SDL_FRect windupBack{
+        m_Target.x,
+        m_Target.y + m_Target.h + windupGap,
+        m_Target.w,
+        windupHeight,
+    };
+
+    DrawCooldownBar(renderer, windupBack, m_TargetAttackWindupRemaining,
+                    kTargetAttackWindupDuration, kTargetWindupColor);
   }
 
   if (IsEncounterOver()) {
@@ -397,7 +418,7 @@ void ArenaGame::UpdateDash(const bool* keys, float deltaTime) {
 }
 
 void ArenaGame::UpdateTarget(float deltaTime) {
-  if (m_TargetHealth <= 0.0f) {
+  if (m_TargetHealth <= 0.0f || m_TargetAttackWindupRemaining > 0.0f) {
     return;
   }
 
@@ -432,8 +453,8 @@ void ArenaGame::UpdateTargetAttack(float deltaTime) {
   m_TargetAttackCooldownRemaining =
       std::max(0.0f, m_TargetAttackCooldownRemaining - deltaTime);
 
-  if (m_TargetHealth <= 0.0f || m_PlayerHealth <= 0.0f ||
-      m_TargetAttackCooldownRemaining > 0.0f) {
+  if (m_TargetHealth <= 0.0f || m_PlayerHealth <= 0.0f) {
+    m_TargetAttackWindupRemaining = 0.0f;
     return;
   }
 
@@ -448,18 +469,33 @@ void ArenaGame::UpdateTargetAttack(float deltaTime) {
   const float distance = std::hypot(playerCenter.x - targetCenter.x,
                                     playerCenter.y - targetCenter.y);
 
-  if (distance > kTargetAttackRange) {
+  if (m_TargetAttackWindupRemaining > 0.0f) {
+    if (distance > kTargetAttackRange) {
+      m_TargetAttackWindupRemaining = 0.0f;
+      return;
+    }
+
+    m_TargetAttackWindupRemaining =
+        std::max(0.0f, m_TargetAttackWindupRemaining - deltaTime);
+    if (m_TargetAttackWindupRemaining > 0.0f) {
+      return;
+    }
+    m_PlayerHealth = std::clamp(m_PlayerHealth - kTargetAttackDamage, 0.0f,
+                                kPlayerMaxHealth);
+    m_TargetAttackCooldownRemaining = kTargetAttackCooldownDuration;
+
+    if (m_PlayerHealth == 0.0f) {
+      m_HasMoveDestination = false;
+      m_SkillShot.active = false;
+    }
     return;
   }
 
-  m_PlayerHealth =
-      std::clamp(m_PlayerHealth - kTargetAttackDamage, 0.0f, kPlayerMaxHealth);
-  m_TargetAttackCooldownRemaining = kTargetAttackCooldownDuration;
-
-  if (m_PlayerHealth == 0.0f) {
-    m_HasMoveDestination = false;
-    m_SkillShot.active = false;
+  if (m_TargetAttackCooldownRemaining > 0.0f || distance > kTargetAttackRange) {
+    return;
   }
+
+  m_TargetAttackWindupRemaining = kTargetAttackWindupDuration;
 }
 
 bool ArenaGame::IsEncounterOver() const {
@@ -487,6 +523,7 @@ void ArenaGame::ResetEncounter() {
   m_SkillShot = {};
   m_SkillShotCooldownRemaining = 0.0f;
   m_DashCooldownRemaining = 0.0f;
+  m_TargetAttackWindupRemaining = 0.0f;
   m_TargetAttackCooldownRemaining = 0.0f;
   m_RestartDelayRemaining = 0.0f;
 
